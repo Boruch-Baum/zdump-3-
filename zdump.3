@@ -1,0 +1,164 @@
+.\"                                      Hey, vim: ft=nroff
+.\" .UC 4
+.\" First parameter, NAME, should be all caps
+.\" Second parameter, SECTION, should be 1-8, maybe w/ subsection
+.\" other parameters are allowed: see man(7), man(1)
+.TH "zdump" "3" "2012-06-19" "Linux" "libhdate"
+.\" Please adjust this date whenever revising the manpage.
+.\"
+.\" Some roff macros, for reference:
+.\" .nh        disable hyphenation
+.\" .hy        enable hyphenation
+.\" .ad l      left justify
+.\" .ad b      justify to both left and right margins
+.\" .nf        disable filling
+.\" .fi        enable filling
+.\" .br        insert line break
+.\" .sp <n>    insert n+1 empty lines
+.\" for manpage-specific macros, see man(7). Also refer to groff(7).
+.\" Copyright:  2012 (c) Boruch Baum <boruch-baum@users.sourceforge.net>
+.SH "NAME"
+zdump \- report time zone and daylight savings time information
+.PP 
+.SH "SYNOPSIS"
+.nf
+.B #include <zdump.h>
+.sp
+.BI "int zdump( char *" tzname ", const time_t " start ", const time_t " end ",
+.BI "           int* " num_entries ", void** " return_data ");"
+
+.SH "DESCRIPTION"
+The \fBzdump\fP function interprets a system \fBTZif\fP file ( see \fBtzfile\fP(5) ) for the timezone \fItzname\fP, and returns that file's timezone and daylight-savings-time transition information for the \fBtime_t\fP interval \fIstart\fP to \fIend\fP. The data type \fBtime_t\fP, often described in man pages as 'calendar time', is an integer value (not an \fBint\fP data type) representing the number of seconds elapsed since the "Epoch", 1970-01-01 00:00:00 +0000 (UTC).
+
+\fItzname\fP may be the path to any valid \fBTZif\fP file, relative to either the absolute path described in the \fBTZDIR\fP environment variable (checked first), \fI/usr/share/zoneinfo/\fP, or \fI/usr/lib/zoneinfo/\fP. \fItzname\fP may also be \fBNULL\fP, which case \fBzdump\fP will search those paths for a \fBTZif\fP file named \fIlocaltime\fP, which on most systems will be preset. \fBTZif\fP files may be manually composed, and compiled using \fBzic\fP, but most system administrators with outside lives install one of the complete packages of timezone data files (In \fBDebian\fP, this package is called \fBtzdata\fP), which can be expected to install onto your system, files with \fItzname\fP corresponding to the IANA standard timezone names (refer to section \fBSEE ALSO\fP, at end of this man page), such as \fIAsia/Jerusalem\fP.
+
+The parameters *\fInum_entries\fP and *\fIreturn_data\fP are described below, in section \fBRETURN VALUES\fP.
+
+.SH "RETURN VALUES"
+Upon success, the function returns a 0, sets the variable *\fIreturn_data\fP to point to a \fBmalloc\fP()ed array of type \fIzdumpinfo\fP (see below), containing the data found, and sets the \fIint\fP variable pointed to by *\fInum_entries\fP to the number of elements in the \fIzdumpinfo\fP array. The caller must \fBfree\fP() the *\fIreturn_data\fP pointer.
+
+Upon failure, the function returns a non-zero error code (see \fBERROR CODES\fP below), sets the variable *\fIreturn_data\fP to \fBNULL\fP, and sets the \fIint\fP variable pointed to by *\fInum_entries\fP to 0.
+
+\fIzdumpinfo\fP is a structure defined in \fI<zdump.h>\fP as follows:
+
+.in +4n
+.nf
+struct zdumpinfo {
+	time_t start;
+	int    utc_offset;
+	char   save_secs;
+	char   abbr[MAX_TZ_ABBR_SIZE];
+	};
+.fi
+.in
+.PP
+The members of the \fIzdumpinfo\fP structure are:
+.TP
+.I start
+The number of seconds since the "Epoch" at which the information in this array element takes effect. For the first element in the array, this value should correspond to the \fIstart\fP parameter passed to \fBzdump\fP. However, if \fIstart\fP precedes the date for which information is available, the first element will contain information for the first available date, and \fIstart\fP will reflect that date.
+.TP
+.I utc_offset
+The time difference, in seconds, from UTC.
+.TP
+.I save_secs
+The absolute value of the number of seconds that the \fIutc_offset\fP is at variance from the timezone's "standard time". Thus, this value will be zero if not daylight savings time. This value will be negative if this information not would not be available using the \fBlocaltime_r()\fP function.
+.TP
+.I abbr[MAX_TZ_ABBR_SIZE]
+A NUL-terminated character string abbreviation for this variation of the timezone (eg. EST or EDT for the timezone America/New_York). \fIMAX_TZ_ABBR_SIZE\fP is defined in the header file \fI<zdump.h>\fP.
+.PP 
+.SS ERROR CODES
+.TP 17
+.I ZD_FAILURE
+-1    general and undiagnosed failure
+.TP
+.I ZD_BAD_VALUES
+5001  time_t start > time_t end
+.TP
+.I ZD_DIR_PATH
+5002  path to zonetab directory not found
+.TP
+.I ZD_FOPEN
+5003  file not found
+.TP
+.I ZD_FREAD
+5004  unable to read file
+.TP
+.I ZD_MALLOC
+5005  memory allocation error
+.TP
+.I ZD_TZIF_HEADER
+5006  unable to parse tzif header
+
+
+.SH "ENVIRONMENT"
+.TP
+.I TZDIR
+If set, this is where \fBzdump\fP looks first for the TZif file.
+.TP
+.I /usr/share/zoneinfo/
+The second path in which the TZif file is searched. This has been the standard path since libc version 5.4.6.
+.TP
+.I /usr/lib/zoneinfo/
+The final path searched for the TZif file. This was the standard path prior to libc version 5.4.6.
+.SH "VERSIONS"
+-
+.SH "CONFORMING TO"
+-
+.SH "EXAMPLE"
+.sp
+.nf
+#include <zdump.h>  /// for zdump
+#include <stdio.h>  /// for printf
+#include <time.h>   /// for ctime
+#include <stdlib.h> /// for free
+
+
+int main (int argc, char *argv[])
+{
+	int num_entries = 0;
+	void* data = NULL;
+	zdumpinfo* zd = NULL;
+	if ( \fBzdump\fP("Europe/Oslo", 1004248800, 1099202400,
+			 &num_entries, &data) != 0 )
+	{
+		printf("failed to read TZif file\n");
+		exit(1);
+	}
+	printf("number of entries found = %d\\n", num_entries);
+	zd = data;
+	int i;
+	for (i=0; i<num_entries; i++)
+	{
+		printf( "%d: %ld %d %d %s %s", i,
+			 zd->start, zd->utc_offset,
+			 zd->save_secs, zd->abbr, ctime( (time_t*) zd));
+		zd = zd + 1;
+	}
+	if (data != NULL) \fBfree(data)\fP;
+	exit(0);
+}
+.fi
+.in
+.SH "SEE ALSO"
+.BR zdump "(1), " zic "(8) ," tzfile "(5), " ctime "(3), " malloc (3)
+
+The timezone database is often referred to as the \fIOlson database\fP, in recognition of its founding contributor, Arthur David Olson, who continued to maintain it until October 11, 2011. Since then, the database has been maintained by IANA (the Internet Assigned  Numbers Authority):
+.sp
+.in +8n
+http://www.iana.org/time-zones
+.in
+.sp
+Wikipedia has relevant informative pages:
+.sp
+.nf
+http://en.wikipedia.org/wiki/IANA_time_zone_database
+.sp
+http://en.wikipedia.org/wiki/IANA_time_zone_database#Names_of_time_zones
+.sp
+http://en.wikipedia.org/wiki/List_of_IANA_time_zones
+.fi
+.SH "AUTHOR"
+.RS 0
+Boruch Baum <boruch-baum@users.sourceforge.net>
+.PP
+project home page: http://libhdate.sourceforge.net
