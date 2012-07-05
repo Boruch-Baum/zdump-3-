@@ -1,3 +1,12 @@
+zdtest
+- cosmetic changes
+
+zdump
+- change p_rule data structure from global to local
+- cosmetic changes
+- Julian days are 1-365, not 0-365
+- BUGFIX - was printing one entry past range
+
 =========================================================================
 zdump3 (1.0) - Boruch Baum <zdump@gmx.com> 2012-06-19
 =========================================================================

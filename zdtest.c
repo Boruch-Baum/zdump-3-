@@ -42,10 +42,16 @@ int main (int argc, char *argv[])
 	int i;
 
 	zdumpinfo* zd = NULL;
-//	zdump("Europe/Oslo", 1004248800, 1099202400, &num_entries, &data);
-	printf("zdtest: test zdump function\nusage: ./zdtest continent/city time_t time_t\n or    \
- ./zdtest continent/city $(date --date='1970-01-01 00:00:00' +%%s) $(date --date='1980-01-01 00:00:00' +%%s)\n\n");
-
+	if (argc !=4)
+	{
+		printf("\
+zdtest: test zdump function\n\
+usage: ./zdtest continent/city time_t time_t\n\
+ or    ./zdtest continent/city \\\n\
+             $(date --date='1970-01-01 00:00:00' +%%s) \\\n\
+             $(date --date='1980-01-01 00:00:00' +%%s)\n");
+		exit(0);
+	}
 	zdump(argv[1], atol(argv[2]), atol(argv[3]), &num_entries, &data);
 	printf("number of entries found = %d\n", num_entries);
 	zd = data;

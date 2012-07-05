@@ -97,7 +97,6 @@ typedef struct {
 #define DEFAULT_START_HOUR 2
 #define DEFAULT_START_MIN  0
 #define DEFAULT_START_SEC  0
-static rule_detail p_rule;
 
 
 #define BUFFER_INCREMENT 3  /// safe for a single year
@@ -202,7 +201,7 @@ void add_a_tzif_entry( const int i, const time_t start, void* return_data, int* 
 	*num_entries = *num_entries + 1;
 }
 
-void get_time( char *strptr, int *timeofday, int *hour, int *min, int *sec )
+int get_time( char *strptr, int *hour, int *min, int *sec )
 {
 	int fields_found = 0;
 	int sign;
@@ -215,61 +214,61 @@ void get_time( char *strptr, int *timeofday, int *hour, int *min, int *sec )
 	case 2: *sec = DEFAULT_START_SEC;
 	}
 	sign = *hour < 0 ? -1 : 1;
-	*timeofday = (*hour * 3600) + (sign * ((*min * 60) + *sec));
+	return (*hour * 3600) + (sign * ((*min * 60) + *sec));
 }
 
-char* rule_julian( int i, char* next )
+char* rule_julian( int i, char* next, rule_detail* p_rule )
 {
 	char julian[4];
 	int  len = 0;
+	
 
 	next++;
-	p_rule.type[i] = 'J';
+	p_rule->type[i] = 'J';
 	len = strspn(next, NUMERIC);
 	if (len > 3) return NULL;
 	memcpy(&julian, next, len);
 	memset(&julian[len],'\0',1);
-	p_rule.j[i] = atoi( (char*) &julian);
-	j_to_md(p_rule.j[i], &p_rule.m[i], &p_rule.d[i]);
+	p_rule->j[i] = atoi( (char*) &julian);
+	j_to_md(p_rule->j[i], &p_rule->m[i], &p_rule->d[i]);
 	next += len;
-	if (*next == '/') get_time(next+1, &p_rule.start_time[i],
-									&p_rule.hour[i], &p_rule.min[i], &p_rule.sec[i]);
+	if (*next == '/') p_rule->start_time[i] = get_time(next+1, 
+									&p_rule->hour[i], &p_rule->min[i], &p_rule->sec[i]);
 	else
 	{
-		p_rule.start_time[i] = DEFAULT_START_TIME;
-		p_rule.hour[i] = DEFAULT_START_HOUR;
-		p_rule.min[i] = DEFAULT_START_MIN;
-		p_rule.sec[i] = DEFAULT_START_SEC;
+		p_rule->start_time[i] = DEFAULT_START_TIME;
+		p_rule->hour[i] = DEFAULT_START_HOUR;
+		p_rule->min[i] = DEFAULT_START_MIN;
+		p_rule->sec[i] = DEFAULT_START_SEC;
 	}
 	return strchr( next, ',' );
 }
 
-char* rule_mwd( int i, char* next )
+char* rule_mwd( int i, char* next, rule_detail* p_rule )
 {
 	char *next_time  = NULL;
-	p_rule.type[i] = 'M';
+	p_rule->type[i] = 'M';
 	next++;
 	// maybe error-check for 3 values read in sscanf?
-	sscanf(next, "%i.%i.%i", &p_rule.m[i], &p_rule.w[i], &p_rule.d[i]);
+	sscanf(next, "%i.%i.%i", &p_rule->m[i], &p_rule->w[i], &p_rule->d[i]);
 	next_time = strchr( next, '/' );
 	next      = strchr( next, ',' );
 	if ((next_time != NULL) && ((next == NULL) || (next_time < next)))
 	{
 		next_time++;
-		get_time(next_time, &p_rule.start_time[i],
-				&p_rule.hour[i], &p_rule.min[i], &p_rule.sec[i]);
+		p_rule->start_time[i] = get_time(next_time, &p_rule->hour[i], &p_rule->min[i], &p_rule->sec[i]);
 	}
 	else
 	{
-		p_rule.start_time[i] = DEFAULT_START_TIME;
-		p_rule.hour[i] = DEFAULT_START_HOUR;
-		p_rule.min[i] = DEFAULT_START_MIN;
-		p_rule.sec[i] = DEFAULT_START_SEC;
+		p_rule->start_time[i] = DEFAULT_START_TIME;
+		p_rule->hour[i] = DEFAULT_START_HOUR;
+		p_rule->min[i] = DEFAULT_START_MIN;
+		p_rule->sec[i] = DEFAULT_START_SEC;
 	}
 	return next;
 }
 
-int rule_decode( const char* tzif, const size_t tzif_size )
+int rule_decode( const char* tzif, const size_t tzif_size, rule_detail* p_rule )
 {
 	char *rule_string = NULL;
 	int  rule_len;
@@ -287,42 +286,42 @@ int rule_decode( const char* tzif, const size_t tzif_size )
 	setenv("TZ",rule_string,1);
 	rule_len = strlen(rule_string);
 	if (rule_len == 0) return ZD_FAILURE;
-	memset(&p_rule,'\0',sizeof(rule_detail));
+	memset(p_rule,'\0',sizeof(rule_detail));
 	len = strcspn(rule_string, NUMERIC);
-	memcpy(&p_rule.abbr[STD], rule_string, len);
+	memcpy(p_rule->abbr[STD], rule_string, len);
 	next += len;
 	len = strspn(next, TIMERIC);
-	get_time( next, &p_rule.offset[STD], &offset_hour, &offset_min, &offset_sec );
+	p_rule->offset[STD] = get_time( next, &offset_hour, &offset_min, &offset_sec );
 	next +=  len;
 	if ( next != (rule_string + rule_len -1) )
 	{
-		p_rule.has_dst = 1;
+		p_rule->has_dst = 1;
 		len = strcspn(next, NOTABBR);
-		memcpy(&p_rule.abbr[DST], next, len);
+		memcpy(p_rule->abbr[DST], next, len);
 		next += len;
 		len = strspn(next, TIMERIC);
-		if (len == 0) p_rule.offset[DST] = p_rule.offset[STD] + 3600;
-		else get_time( next, &p_rule.offset[DST], &offset_hour, &offset_min, &offset_sec );
+		if (len == 0) p_rule->offset[DST] = p_rule->offset[STD] + 3600;
+		else p_rule->offset[DST] = get_time( next, &offset_hour, &offset_min, &offset_sec );
 		next += len;
-		p_rule.save_secs[STD] = abs(p_rule.offset[DST] - p_rule.offset[STD]);
+		p_rule->save_secs[STD] = abs(p_rule->offset[DST] - p_rule->offset[STD]);
 		next++;
-		if (*next == 'J') next = rule_julian(STD, next);
-		else next = rule_mwd(STD, next);
+		if (*next == 'J') next = rule_julian(STD, next, p_rule);
+		else next = rule_mwd(STD, next, p_rule);
 		if (*next == ',')
 		{
 			next++;
-			if (*next == 'J') next = rule_julian(DST, next);
-			else next = rule_mwd(DST, next);
+			if (*next == 'J') next = rule_julian(DST, next, p_rule);
+			else next = rule_mwd(DST, next, p_rule);
 		}
 	}
 /** DEBUG
 	printf("rule details:\n\
 %c %6s j=%3d m=%2d w=%d d=%2d offset=%6d start_time=%6d h=%2d m=%2d s=%2d has_dst=%d save_secs=%d\n\
 %c %6s j=%3d m=%2d w=%d d=%2d offset=%6d start_time=%6d h=%2d m=%2d s=%2d has_dst=%d save_secs=%d\n",
-(int) p_rule.type[0], (char*) &p_rule.abbr[0], p_rule.j[0], p_rule.m[0], p_rule.w[0], p_rule.d[0],
-p_rule.offset[0], p_rule.start_time[0], p_rule.hour[0], p_rule.min[0], p_rule.sec[0], p_rule.has_dst, p_rule.save_secs[0],
-(int) p_rule.type[1], (char*) &p_rule.abbr[1], p_rule.j[1], p_rule.m[1], p_rule.w[1], p_rule.d[1],
-p_rule.offset[1], p_rule.start_time[1], p_rule.hour[1], p_rule.min[1], p_rule.sec[1], p_rule.has_dst, p_rule.save_secs[1]
+(int) p_rule->type[0], (char*) &p_rule->abbr[0], p_rule->j[0], p_rule->m[0], p_rule->w[0], p_rule->d[0],
+p_rule->offset[0], p_rule->start_time[0], p_rule->hour[0], p_rule->min[0], p_rule->sec[0], p_rule->has_dst, p_rule->save_secs[0],
+(int) p_rule->type[1], (char*) &p_rule->abbr[1], p_rule->j[1], p_rule->m[1], p_rule->w[1], p_rule->d[1],
+p_rule->offset[1], p_rule->start_time[1], p_rule->hour[1], p_rule->min[1], p_rule->sec[1], p_rule->has_dst, p_rule->save_secs[1]
 );
 exit(0);
 */
@@ -351,6 +350,7 @@ int rule_dump( const char* tzif, const size_t tzif_size,
 					  const time_t start, const time_t end, time_t current,
 					  int* num_entries, void** return_data, size_t *ret_buff_size)
 {
+	rule_detail p_rule;
 	time_t prior;
 	struct tm tm_local, tm_gmt, tm_prior;
 	int utc_offset;
@@ -363,7 +363,7 @@ int rule_dump( const char* tzif, const size_t tzif_size,
 //  long tm_gmtoff;           /* Seconds east of UTC */
 //  const char *tm_zone;      /* Timezone abbreviation */
 // returned by gmtime_r localtime_r
-	if (rule_decode( tzif, tzif_size ) == ZD_FAILURE) return ZD_FAILURE;
+	if (rule_decode( tzif, tzif_size, &p_rule ) == ZD_FAILURE) return ZD_FAILURE;
 	init_tm_struct(&tm_local);
 	init_tm_struct(&tm_gmt);
 	if (current < start)
@@ -400,7 +400,7 @@ int rule_dump( const char* tzif, const size_t tzif_size,
 	}
 	if ((!tm_prior.tm_isdst) && (!p_rule.has_dst)) return ZD_SUCCESS;
 	i = tm_prior.tm_isdst > 0 ? 1 : 0;
-	while (current <= end)
+	while (1)
 	{
 		tm_local.tm_hour = p_rule.hour[i];
 		tm_local.tm_min  = p_rule.min[i];
@@ -418,12 +418,13 @@ int rule_dump( const char* tzif, const size_t tzif_size,
 		case 'J':
 			if ( tm_prior.tm_yday < p_rule.j[i] ) tm_local.tm_year = tm_prior.tm_year;
 			else tm_local.tm_year = tm_prior.tm_year + 1;
-			tm_local.tm_mday  = p_rule.j[i] + 1;
+			tm_local.tm_mday  = p_rule.j[i];
 			tm_local.tm_mon  = 0;
 			break;
 		default: return ZD_FAILURE; break;
 		}
 		current = mktime(&tm_local);
+		if (current > end) break;
 		if ( !( *num_entries%BUFFER_INCREMENT) )
 		{
 			*return_data = perform_a_realloc(*return_data, ret_buff_size);
@@ -525,10 +526,11 @@ int zdump(               /// returns 0 on ZD_SUCCESS, -1 on ZD_FAILURE
 		}
 		transition_time_ptr = transition_time_ptr + field_size;
 	}
-	while ( (i < tzh.timecnt) && (temp_long <= end) )
+	while (i < tzh.timecnt)
 	{
-		if ( !( *num_entries%BUFFER_INCREMENT) ) *return_data = perform_a_realloc(*return_data, &ret_buff_size);
 		temp_long = flip_tz_long( transition_time_ptr, field_size );
+		if (temp_long > end) break;
+		if ( !( *num_entries%BUFFER_INCREMENT) ) *return_data = perform_a_realloc(*return_data, &ret_buff_size);
 		add_a_tzif_entry( i, (time_t) temp_long, *return_data, num_entries );
 		transition_time_ptr = transition_time_ptr + field_size;
 		i++;
